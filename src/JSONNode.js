@@ -5,42 +5,49 @@ import JSONObjectNode from './JSONObjectNode';
 import JSONArrayNode from './JSONArrayNode';
 import JSONIterableNode from './JSONIterableNode';
 import JSONValueNode from './JSONValueNode';
+import CollapsibleString from './CollapsibleString';
 
 function getDiffValue(rawValue) {
   let diffValue = {};
 
-  let splitValue = rawValue.split('$');
+  console.log(`[getDiffValue] typeof rawValue: ${typeof rawValue}`);
 
-  let colour = 'background-color: ';
-  switch (splitValue[0]) {
-    case 'Unique':
-      colour += 'rgba(255, 0, 0, 0.4)';
-      diffValue.type = 'Unique';
-      break;
-    case 'Missing':
-      colour += 'rgba(0, 255, 0, 0.4)';
-      diffValue.type = 'Missing';
-      break;
-    case 'ValueChanged':
-      colour += 'rgba(255, 255, 0, 0.4)';
-      diffValue.type = 'ValueChanged';
-      break;
-    default:
-      colour += 'transparent';
-      diffValue.type = 'Unknown';
-      break;
-  }
-  diffValue.colour = colour;
+  if (typeof rawValue === 'string') {
+    let splitValue = rawValue.split('$');
 
-  if (splitValue[1]) {
-    diffValue.value = decodeURIComponent(splitValue[1]);
-    if (diffValue.value.indexOf('=>') !== -1) {
-      let split = diffValue.value.split('=>');
-      diffValue.value = split[0];
-      diffValue.changedValue = split[1];
+    let colour = 'background-color: ';
+    switch (splitValue[0]) {
+      case 'Unique':
+        colour += 'rgba(255, 0, 0, 0.4)';
+        diffValue.type = 'Unique';
+        break;
+      case 'Missing':
+        colour += 'rgba(0, 255, 0, 0.4)';
+        diffValue.type = 'Missing';
+        break;
+      case 'ValueChanged':
+        colour += 'rgba(255, 255, 0, 0.4)';
+        diffValue.type = 'ValueChanged';
+        break;
+      default:
+        colour += 'transparent';
+        diffValue.type = 'Unknown';
+        break;
     }
-  } else {
-    diffValue.value = '""';
+    diffValue.colour = colour;
+
+    const decodedValue = decodeURIComponent(splitValue[1]);
+
+    if (decodedValue) {
+      diffValue.value = decodedValue;
+      if (diffValue.value.indexOf('=>') !== -1) {
+        let split = diffValue.value.split('=>');
+        diffValue.value = split[0];
+        diffValue.changedValue = split[1];
+      }
+    } else {
+      diffValue.value = '""';
+    }
   }
 
   return diffValue;
@@ -56,6 +63,12 @@ const JSONNode = ({
   isCustomNode,
   ...rest
 }) => {
+  const isDiffMode = !!rest.diffMode;
+  let diffValues = {};
+  if (isDiffMode) {
+    diffValues = getDiffValue(value);
+  }
+
   const nodeType = isCustomNode(value) ? 'Custom' : objType(value);
 
   const simpleNodeProps = {
@@ -66,28 +79,28 @@ const JSONNode = ({
     nodeType,
     styling,
     value,
-    valueRenderer
+    valueRenderer,
+    collapsibleStringIcons: rest.collapsibleStringIcons
   };
 
   const nestedNodeProps = {
     ...rest,
     ...simpleNodeProps,
     data: value,
-    isCustomNode
+    isCustomNode,
+    collapsibleStringIcons: rest.collapsibleStringIcons
   };
-
-  const isDiffMode = !!rest.diffMode;
-  let diffValues = {};
-  if (isDiffMode && nodeType === 'String') {
-    diffValues = getDiffValue(value);
-  }
 
   switch (nodeType) {
     case 'Object':
     case 'Error':
     case 'WeakMap':
     case 'WeakSet':
-      return <JSONObjectNode {...nestedNodeProps} />;
+      if (!isDiffMode) {
+        return <JSONObjectNode {...nestedNodeProps} />;
+      } else {
+        return <JSONObjectNode {...nestedNodeProps} />;
+      }
     case 'Array':
       return <JSONArrayNode {...nestedNodeProps} />;
     case 'Iterable':
@@ -99,23 +112,39 @@ const JSONNode = ({
         <JSONValueNode
           {...simpleNodeProps}
           diffColour={diffValues.colour}
-          valueGetter={raw => {
+          valueRenderer={value => {
             if (!isDiffMode) {
-              return `"${raw}"`;
+              return (
+                <CollapsibleString
+                  value={value}
+                  collapsibleStringIcons={rest.collapsibleStringIcons}
+                />
+              );
             } else {
               if (diffValues.type === 'ValueChanged') {
                 return (
                   <span>
                     {rest.diffLabelCreator(diffValues.type)}
-                    <span>{`"${diffValues.value}" => "${
-                      diffValues.changedValue
-                    }"`}</span>
+                    <span> </span>
+                    <CollapsibleString
+                      value={`"${diffValues.value}"`}
+                      collapsibleStringIcons={rest.collapsibleStringIcons}
+                    />
+                    <span>{' => '}</span>
+                    <CollapsibleString
+                      value={`"${diffValues.changedValue}"`}
+                      collapsibleStringIcons={rest.collapsibleStringIcons}
+                    />
                   </span>
                 );
               } else {
                 return (
                   <span>
-                    {rest.diffLabelCreator(diffValues.type)} {diffValues.value}
+                    {rest.diffLabelCreator(diffValues.type)}{' '}
+                    <CollapsibleString
+                      value={diffValues.value}
+                      collapsibleStringIcons={rest.collapsibleStringIcons}
+                    />
                   </span>
                 );
               }
@@ -169,7 +198,11 @@ JSONNode.propTypes = {
   styling: PropTypes.func.isRequired,
   value: PropTypes.any,
   valueRenderer: PropTypes.func.isRequired,
-  isCustomNode: PropTypes.func.isRequired
+  isCustomNode: PropTypes.func.isRequired,
+  collapsibleStringIcons: PropTypes.shape({
+    expand: PropTypes.any,
+    collapse: PropTypes.any
+  })
 };
 
 export default JSONNode;
