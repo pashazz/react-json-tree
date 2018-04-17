@@ -10,8 +10,6 @@ import CollapsibleString from './CollapsibleString';
 function getDiffValue(rawValue) {
   let diffValue = {};
 
-  console.log(`[getDiffValue] typeof rawValue: ${typeof rawValue}`);
-
   if (typeof rawValue === 'string') {
     let splitValue = rawValue.split('$');
 
